@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/gopacket/pcap"
 	"github.com/paragor/paradrop80211/pkg/discovering"
+	"github.com/paragor/paradrop80211/pkg/manuf"
 	"github.com/paragor/paradrop80211/pkg/wifi"
 	"os"
 	"sync"
@@ -27,6 +28,11 @@ func main() {
 
 	clients := make(chan discovering.ClientInfo, 1)
 	aps := make(chan discovering.AccessPointInfo, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+		time.Sleep(time.Second)
+	}()
 
 	sniffer := wifi.NewSniffer(
 		handle,
@@ -45,13 +51,16 @@ func main() {
 	hopper := wifi.NewHopper(handle, iface, true, false, time.Second, func(channel int, freq int) {
 		fmt.Printf("channel change to: %d/%d\n", channel, freq)
 	})
+	go func() {
+		fmt.Println(hopper.Start(ctx))
+	}()
 
 	go func() {
 		for {
 			select {
 			case ap := <-aps:
 				apCache.Store(ap.BSSID.String(), ap)
-				fmt.Println(ap)
+				fmt.Println(ap, manuf.ManufLookup(ap.BSSID))
 
 			case client := <-clients:
 				ap, ok := apCache.Load(client.AccessPointBssid.String())
@@ -60,7 +69,7 @@ func main() {
 					ssid = ap.(discovering.AccessPointInfo).SSID
 				}
 				clientCache.Store(client.ClientBssid.String(), client)
-				fmt.Println(client, ssid)
+				fmt.Println(client, manuf.ManufLookup(client.ClientBssid), ssid, manuf.ManufLookup(client.AccessPointBssid))
 			}
 		}
 
@@ -88,17 +97,8 @@ func main() {
 	//	}
 	//}()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer func() {
-		cancel()
-		time.Sleep(time.Second)
-	}()
-
 	go func() {
 		fmt.Println(sniffer.Start(ctx))
-	}()
-	go func() {
-		fmt.Println(hopper.Start(ctx))
 	}()
 
 	<-make(chan struct{})
