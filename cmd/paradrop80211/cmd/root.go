@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/paragor/paradrop80211/pkg/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -10,7 +11,10 @@ const (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "paradrop80211",
+	Use: "paradrop80211",
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		logger.Close()
+	},
 }
 
 func Execute() {

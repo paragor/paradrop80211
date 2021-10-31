@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/google/gopacket/pcap"
 	network "github.com/paragor/paradrop80211/pkg/interface"
+	"github.com/paragor/paradrop80211/pkg/logger"
 	"github.com/paragor/paradrop80211/pkg/packets"
 	"strings"
 	"time"
@@ -77,7 +78,10 @@ func (h *Hopper) Start(ctx context.Context) error {
 					newFreqs = append(freqs[:i], freqs[i+1:]...)
 					freqs = newFreqs
 				} else {
-					return err
+					logger.FromContext(ctx).
+						With("channel", channel, "iface", h.iface).
+						Warnf("cant set interface channel :%s", err.Error())
+					continue
 				}
 			} else {
 				h.onChannelChange(channel, freq)

@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"github.com/google/gopacket/pcap"
 	"github.com/paragor/paradrop80211/pkg/discovering"
+	"github.com/paragor/paradrop80211/pkg/logger"
 	"github.com/paragor/paradrop80211/pkg/manuf"
 	"github.com/paragor/paradrop80211/pkg/wifi"
 	"os"
@@ -44,6 +44,8 @@ var listenCmd = &cobra.Command{
 		pairs := make(chan discovering.PairInfo, 1)
 		aps := make(chan discovering.AccessPointInfo, 1)
 		ctx, cancel := context.WithCancel(context.Background())
+
+		log := logger.FromContext(ctx)
 		defer func() {
 			cancel()
 			time.Sleep(time.Second)
@@ -65,10 +67,10 @@ var listenCmd = &cobra.Command{
 		)
 		if useHoper {
 			hopper := wifi.NewHopper(handle, iface, true, false, time.Second, func(channel int, freq int) {
-				fmt.Printf("channel change to: %d/%d\n", channel, freq)
+				log.Debugf("channel change to: %d/%d\n", channel, freq)
 			})
 			go func() {
-				fmt.Println(hopper.Start(ctx))
+				log.Error(hopper.Start(ctx))
 			}()
 		}
 
@@ -77,7 +79,7 @@ var listenCmd = &cobra.Command{
 				select {
 				case ap := <-aps:
 					apCache.Store(ap.BSSID.String(), ap)
-					fmt.Println("ap:   ", ap, manuf.ManufLookup(ap.BSSID))
+					log.Info("ap: ", ap, " ", manuf.ManufLookup(ap.BSSID))
 
 				case pair := <-pairs:
 
@@ -90,7 +92,7 @@ var listenCmd = &cobra.Command{
 					}
 					pairsCache.Store(pair.BssidFrom.String(), pair)
 
-					fmt.Printf(
+					log.Infof(
 						"pair: [%s] %s (%s) -> %s (%s) chan %d [%d]\n",
 						ssid,
 						pair.BssidFrom,
@@ -106,7 +108,7 @@ var listenCmd = &cobra.Command{
 		}()
 
 		go func() {
-			fmt.Println(sniffer.Start(ctx))
+			log.Error(sniffer.Start(ctx))
 		}()
 
 		s := make(chan os.Signal, 1)
