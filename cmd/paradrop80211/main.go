@@ -13,20 +13,21 @@ import (
 )
 
 var apCache sync.Map
-var clientCache sync.Map
+var pairsCache sync.Map
 
 func main() {
 	iface := os.Getenv("IFACE")
 	if iface == "" {
 		iface = "wlp3s0mon"
 	}
+
 	handle, err := pcap.OpenLive(iface, 65536, true, 500*time.Millisecond)
 	if err != nil {
 		panic(err)
 	}
 	defer handle.Close()
 
-	clients := make(chan discovering.ClientInfo, 1)
+	pairs := make(chan discovering.PairInfo, 1)
 	aps := make(chan discovering.AccessPointInfo, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
@@ -42,9 +43,9 @@ func main() {
 				nil,
 				true,
 			),
-			discovering.NewClientsDiscover(
+			discovering.NewPairsDiscover(
 				true,
-				clients,
+				pairs,
 			),
 		},
 	)
@@ -60,42 +61,33 @@ func main() {
 			select {
 			case ap := <-aps:
 				apCache.Store(ap.BSSID.String(), ap)
-				fmt.Println(ap, manuf.ManufLookup(ap.BSSID))
+				fmt.Println("ap:   ", ap, manuf.ManufLookup(ap.BSSID))
 
-			case client := <-clients:
-				ap, ok := apCache.Load(client.AccessPointBssid.String())
+			case pair := <-pairs:
+
 				ssid := ""
-				if ok {
+				if ap, ok := apCache.Load(pair.BssidTo.String()); ok {
 					ssid = ap.(discovering.AccessPointInfo).SSID
 				}
-				clientCache.Store(client.ClientBssid.String(), client)
-				fmt.Println(client, manuf.ManufLookup(client.ClientBssid), ssid, manuf.ManufLookup(client.AccessPointBssid))
+				if ap, ok := apCache.Load(pair.BssidTo.String()); ok {
+					ssid = ap.(discovering.AccessPointInfo).SSID
+				}
+				pairsCache.Store(pair.BssidFrom.String(), pair)
+
+				fmt.Printf(
+					"pair: [%s] %s (%s) -> %s (%s) chan %d [%d]\n",
+					ssid,
+					pair.BssidFrom,
+					manuf.ManufLookup(pair.BssidFrom),
+					pair.BssidTo,
+					manuf.ManufLookup(pair.BssidTo),
+					pair.Channel,
+					pair.DBMAntennaSignal,
+				)
 			}
 		}
 
 	}()
-	//go func() {
-	//	for {
-	//		<-time.After(time.Second * 5)
-	//		apCache.Range(func(key, apI interface{}) bool {
-	//			ap := apI.(discovering.AccessPointInfo)
-	//			fmt.Println(ap)
-	//
-	//			return true
-	//		})
-	//		clientCache.Range(func(key, clientI interface{}) bool {
-	//			client := clientI.(discovering.ClientInfo)
-	//			apInfo, ok := apCache.Load(client.AccessPointBssid.String())
-	//			ssid := ""
-	//			if ok {
-	//				ssid = apInfo.(discovering.AccessPointInfo).SSID
-	//			}
-	//			fmt.Println(client, ssid)
-	//
-	//			return true
-	//		})
-	//	}
-	//}()
 
 	go func() {
 		fmt.Println(sniffer.Start(ctx))
